@@ -1,6 +1,34 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+"""
+devices_inspection.py —— 网络设备自动化巡检脚本
+
+功能简介：
+    本脚本通过读取 Excel 格式的 info 配置文件，自动批量登录网络设备并执行预设
+    的巡检命令，将巡检结果保存为本地日志文件，适用于日常网络运维的自动化巡检场景。
+
+主要功能：
+    - 支持读取加密/未加密的 Excel 配置文件（info.xlsx），获取设备登录信息与巡检命令；
+    - 通过 Netmiko 库以 SSH/Telnet 方式登录设备，支持多种设备类型；
+    - 采用多线程并发巡检，最大并发线程数为 200（可配置），显著提升巡检效率；
+    - 自动按当天日期创建结果目录，每台设备生成独立的巡检日志文件；
+    - 对登录失败（超时、认证失败、协议错误等）的设备统一记录至 01log.log 文件；
+    - 巡检完成后 CLI 输出汇总信息，包含巡检设备总数、异常数及总耗时。
+
+依赖库：
+    netmiko, pandas, msoffcrypto, openpyxl
+
+使用方式：
+    1. 在脚本同目录下准备 info.xlsx（Sheet1：设备登录信息，Sheet2：巡检命令）；
+    2. 直接运行脚本：python devices_inspection.py；
+    3. 按提示输入 info 文件名（默认为 info.xlsx）；
+    4. 巡检结果将保存至当天日期命名的文件夹中。
+
+         Author: Robin
+  Creation Date: 2023.12.25
+        Version: v2026.03.24
+"""
 
 import os
 import sys
@@ -13,7 +41,6 @@ from io import BytesIO
 from netmiko import ConnectHandler
 from netmiko import exceptions
 from contextlib import contextmanager
-
 
 FILENAME = input(f"\n请输入info文件名（默认为 info.xlsx）：") or "info.xlsx"  # 指定info文件名称
 INFO_PATH = os.path.join(os.getcwd(), FILENAME)  # 读取info文件路径
