@@ -28,23 +28,23 @@ devices_inspection.py —— 网络设备自动化巡检脚本
     3. 按提示输入 info 文件名（默认为 info.xlsx）；
     4. 巡检结果将保存至当天日期命名的文件夹中。
 
-         Author: Robin (modified)
-  Creation Date: 2023.12.25
-        Version: v2026.03.24 (enhanced)
+         作者：罗宾（修改版）
+  创建日期：2023年12月25日
+        版本：v2026.03.24（增强版）
 """
 
-import os
-import sys
-import time
-import getpass
-import threading
-import shutil
-import msoffcrypto
-import pandas as pd
-from io import BytesIO
-from netmiko import ConnectHandler
-from netmiko import exceptions
-from contextlib import contextmanager
+导入 os
+导入 sys
+导入 time
+导入 getpass
+导入 threading
+导入 shutil
+导入 msoffcrypto
+导入 pandas as pd
+从 io 导入 BytesIO
+从netmiko 导入ConnectHandler
+从netmiko 导入exceptions
+从contextlib 导入contextmanager
 
 FILENAME = input(f"\n请输入info文件名（默认为 info.xlsx）：") or "info.xlsx"  # 指定info文件名称
 INFO_PATH = os.path.join(os.getcwd(), FILENAME)  # 读取info文件路径
@@ -54,54 +54,54 @@ POOL = threading.BoundedSemaphore(200)  # 最大线程控制
 
 
 # 自定义异常类，用于处理输入密码为None情况
-class PasswordRequiredError(Exception):
+PasswordRequiredError异常)
     """文件受密码保护，必须提供密码"""
-    pass
+    通过
 
 
-@contextmanager
+@上下文管理器
 def suppress_stderr():
     """
     临时屏蔽 stderr 输出（仅用于抑制 Paramiko 在 SSH 连接失败时
     输出的 'Error reading SSH protocol banner' 等底层 traceback）。
     """
-    with open(os.devnull, 'w') as devnull:
+使用打开(os.devnull, 'w')作为 devnull：
         old_stderr = sys.stderr
         sys.stderr = devnull
         try:
             yield
-        finally:
+        最终:
             sys.stderr = old_stderr
 
 
 # 判断info文件是否被加密，使用不同的读取方式
 def read_info():
-    if is_encrypted(INFO_PATH):
-        return read_encrypted_file(INFO_PATH)
+    如果 is_encrypted(INFO_PATH):
+        返回 读取加密文件(INFO_PATH)
     else:
-        return read_unencrypted_file(INFO_PATH)
+        返回 读取未加密文件(INFO_PATH)
 
 
 # 检测info文件是否被加密
 def is_encrypted(info_file: str) -> bool:
-    try:
-        with open(info_file, "rb") as f:
+    尝试:
+        使用 打开(info_file, "rb") 作为 f:
             return msoffcrypto.OfficeFile(f).is_encrypted()
-    except Exception:
+    除异常：
         return False
 
 
 # 读取被加密info文件
 def read_encrypted_file(info_file: str, max_retry: int = 3):
-    retry_count = 0
-    while retry_count < max_retry:
+    重试次数 = 0
+    当重试次数 < 最大重试次数:
         try:
-            password = getpass.getpass("\ninfo文件被加密，请输入密码：") or None
-            if not password:
-                raise PasswordRequiredError("文件受密码保护，必须提供密码！")
+            密码 = getpass.getpass("\ninfo文件被加密，请输入密码：") 或 无
+            如果 不是密码：
+                抛出 PasswordRequiredError("文件受密码保护，必须提供密码！")
 
-            decrypted_data = BytesIO()
-            with open(info_file, "rb") as f:
+            解密后的数据 = BytesIO()
+            使用 open(info_file, "rb") 作为 f：
                 office_file = msoffcrypto.OfficeFile(f)
                 office_file.load_key(password=password)
                 office_file.decrypt(decrypted_data)
@@ -120,8 +120,8 @@ def read_encrypted_file(info_file: str, max_retry: int = 3):
             sys.exit(1)
         except (msoffcrypto.exceptions.InvalidKeyError, PasswordRequiredError):
             retry_count += 1
-            if retry_count < max_retry:
-                print(f"\n密码错误，请重新输入！（剩余尝试次数：{max_retry - retry_count}）")
+            如果 重试次数 < 最大重试次数:
+                打印(f"\n密码错误，请重新输入！（剩余尝试次数：{最大重试次数 - 重试次数}）")
             else:
                 input("\n超过最大尝试次数，输入Enter退出！")
                 sys.exit(1)
@@ -136,7 +136,7 @@ def read_encrypted_file(info_file: str, max_retry: int = 3):
 
 # 读取未加密info文件
 def read_unencrypted_file(info_file: str):
-    try:
+    尝试:
         devices_dataframe = pd.read_excel(info_file, sheet_name=0, dtype=str, keep_default_na=False)
         cmds_dataframe = pd.read_excel(info_file, sheet_name=1, dtype=str)
     except FileNotFoundError:
@@ -161,29 +161,29 @@ def connect_with_retry(login_info, max_retries=3, retry_delay=5):
     成功时 connection 有效，其余为 None；失败时 connection 为 None，返回错误信息。
     """
     last_exception = None
-    for attempt in range(1, max_retries + 1):
+    对于尝试 在 范围(1, 最大重试次数 + 1):
         try:
-            with suppress_stderr():
+            使用 抑制标准错误输出():
                 conn = ConnectHandler(**login_info)
-                return conn, False, None, None
+                返回连接，假, 无, 无
         except Exception as e:
             last_exception = e
-            if isinstance(e, exceptions.NetmikoAuthenticationException):
-                if attempt < max_retries:
-                    with LOCK:
+            如果 isinstance(e, 异常。NetmikoAuthenticationException):
+                如果尝试 < 最大重试次数:
+                    使用锁:
                         print(f"设备 {login_info['host']} 认证失败，{retry_delay}秒后进行第{attempt+1}次重试...")
-                    time.sleep(retry_delay)
-                    continue
-                else:
+                    时间。休眠(重试延迟)
+                    继续
+                否则:
                     return None, True, 'NetmikoAuthenticationException', str(e)
             else:
                 # 非认证异常，不重试
-                return None, True, type(e).__name__, str(e)
+                返回 无, 真, 类型(e).__name__, 字符串(e)
     return None, True, 'UnknownError', str(last_exception)
 
 
 # === 巡检主函数（已集成功能1、功能2）===
-def inspection(login_info, cmds_dict):
+定义 检查(登录信息, 命令字典):
     t11 = time.time()
     ssh = None
 
@@ -195,27 +195,27 @@ def inspection(login_info, cmds_dict):
             match error_type:
                 case 'AttributeError':
                     print(f'设备 {login_info["host"]} 缺少设备管理地址！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
-                        log.write(f'设备 {login_info["host"]} 缺少设备管理地址！\n')
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
+                        日志。写入(f'设备 {登录信息["主机"]} 缺少设备管理地址！\n')
                 case 'NetmikoTimeoutException':
                     print(f'设备 {login_info["host"]} 管理地址或端口不可达！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
-                        log.write(f'设备 {login_info["host"]} 管理地址或端口不可达！\n')
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
+                        日志。写入(f'设备 {登录信息["主机"]} 管理地址或端口不可达！\n')
                 case 'NetmikoAuthenticationException':
                     print(f'设备 {login_info["host"]} 用户名或密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
                         log.write(f'设备 {login_info["host"]} 用户名或密码认证失败！\n')
                 case 'ValueError':
                     print(f'设备 {login_info["host"]} Enable密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
                         log.write(f'设备 {login_info["host"]} Enable密码认证失败！\n')
                 case 'TimeoutError':
                     print(f'设备 {login_info["host"]} Telnet连接超时！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
                         log.write(f'设备 {login_info["host"]} Telnet连接超时！\n')
-                case 'ReadTimeout':
+                案例 '读取超时':
                     print(f'设备 {login_info["host"]} Enable密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    使用 open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', 编码='utf-8') 作为日志：
                         log.write(f'设备 {login_info["host"]} Enable密码认证失败！\n')
                 case 'ConnectionRefusedError':
                     print(f'设备 {login_info["host"]} 远程登录协议错误！')
@@ -262,7 +262,7 @@ def inspection(login_info, cmds_dict):
     if extra_cmd:
         try:
             output = ssh.send_command(extra_cmd, read_timeout=60)
-            extra_log_path = os.path.join(host_subdir, f"{login_info['host']}.log.log")
+            extra_log_path = os.path.join(host_subdir, f"{login_info['host']}-log.log")
             with open(extra_log_path, 'w', encoding='utf-8') as extra_f:
                 extra_f.write(output)
         except Exception:
