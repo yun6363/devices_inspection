@@ -1,31 +1,31 @@
-名称: 构建可执行文件
+name: Build Executable
 on: [push, workflow_dispatch]
 
 jobs:
-build-windows:
-    名称: 在 Windows 上构建
-    运行于: windows-latest
-    步骤:
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
+    steps:
       - name: Checkout code
-        使用: actions/checkout@v4
+        uses: actions/checkout@v4
 
-      - 名称: 设置 Python
-        使用: actions/setup-python@v5
-        使用:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
           python-version: '3.10'
 
-      - 名称: 安装依赖项
-        运行: |
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install netmiko pandas msoffcrypto-tool openpyxl
 
-      - name: 使用 PyInstaller 构建
-        运行: |
+      - name: Build with PyInstaller
+        run: |
           python -m PyInstaller --onefile --name "DeviceInspector" devices_inspection.py
 
-      - 名称: 上传制品
-        用途: actions/upload-artifact@v4
-        使用:
-          名称: DeviceInspector-windows
-          路径: dist/DeviceInspector.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeviceInspector-windows
+          path: dist/DeviceInspector.exe
