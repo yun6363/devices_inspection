@@ -2,37 +2,8 @@
 # -*- coding: UTF-8 -*-
 
 """
-devices_inspection.py —— 网络设备自动化巡检脚本
-
-功能简介：
-    本脚本通过读取 Excel 格式的 info 配置文件，自动批量登录网络设备并执行预设
-    的巡检命令，将巡检结果保存为本地日志文件，适用于日常网络运维的自动化巡检场景。
-
-主要功能：
-    - 支持读取加密/未加密的 Excel 配置文件（info.xlsx），获取设备登录信息与巡检命令；
-    - 通过 Netmiko 库以 SSH/Telnet 方式登录设备，支持多种设备类型；
-    - 采用多线程并发巡检，最大并发线程数为 200（可配置），显著提升巡检效率；
-    - 自动按当天日期创建结果目录，每台设备在独立的子目录中生成巡检日志文件；
-    - 额外支持执行 'show logging alarm' 和 'display logbuffer' 命令并保存为独立日志；
-    - 账户或密码错误时自动重试3次（间隔5秒），提高巡检容错性；
-    - 对登录失败（超时、认证失败、协议错误等）的设备统一记录至 01log.log 文件；
-    - 巡检完成后 CLI 输出汇总信息，包含巡检设备总数、异常数及总耗时。
-
-依赖库：
-    netmiko, pandas, msoffcrypto, openpyxl
-
-使用方式：
-    1. 在脚本同目录下准备 info.xlsx（Sheet1：设备登录信息，Sheet2：巡检命令）；
-    2. 直接运行脚本：python devices_inspection.py；
-    3. 按提示输入 info 文件名（默认为 info.xlsx）；
-    4. 巡检结果将保存至当天日期命名的文件夹中，每台设备的子目录下包含：
-       - {host}.log.log      # 常规命令输出（双后缀）
-       - {host}_show_logging_alarm.log      # 若有该命令的输出
-       - {host}_display_logbuffer.log       # 若有该命令的输出
-
-         Author: Robin (modified by AI)
-  Creation Date: 2023.12.25
-        Version: v2026.03.24 (enhanced)
+devices_inspection.py —— 网络设备自动化巡检脚本 (增强版)
+支持按主机子目录、额外命令日志、认证重试
 """
 
 import os
@@ -176,38 +147,41 @@ def inspection(login_info, cmds_dict):
 
     if has_error:
         with LOCK:
+            # 根据错误类型输出和记录
+            log_path = os.path.join(os.getcwd(), LOCAL_TIME, '01log.log')
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
             match error_type:
                 case 'AttributeError':
                     print(f'设备 {login_info["host"]} 缺少设备管理地址！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} 缺少设备管理地址！\n')
                 case 'NetmikoTimeoutException':
                     print(f'设备 {login_info["host"]} 管理地址或端口不可达！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} 管理地址或端口不可达！\n')
                 case 'NetmikoAuthenticationException':
                     print(f'设备 {login_info["host"]} 用户名或密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} 用户名或密码认证失败！\n')
                 case 'ValueError':
                     print(f'设备 {login_info["host"]} Enable密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} Enable密码认证失败！\n')
                 case 'TimeoutError':
                     print(f'设备 {login_info["host"]} Telnet连接超时！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} Telnet连接超时！\n')
                 case 'ReadTimeout':
                     print(f'设备 {login_info["host"]} Enable密码认证失败！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} Enable密码认证失败！\n')
                 case 'ConnectionRefusedError':
                     print(f'设备 {login_info["host"]} 远程登录协议错误！')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} 远程登录协议错误！\n')
                 case _:
                     print(f'设备 {login_info["host"]} 未知错误！{error_type}: {error_msg}')
-                    with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'a', encoding='utf-8') as log:
+                    with open(log_path, 'a', encoding='utf-8') as log:
                         log.write(f'设备 {login_info["host"]} 未知错误！{error_type}: {error_msg}\n')
         POOL.release()
         return
@@ -215,7 +189,6 @@ def inspection(login_info, cmds_dict):
     # 创建主机子目录
     host_subdir = os.path.join(os.getcwd(), LOCAL_TIME, login_info['host'])
     os.makedirs(host_subdir, exist_ok=True)
-    # 主日志文件名：{host}.log.log （双后缀）
     main_log_path = os.path.join(host_subdir, f"{login_info['host']}.log.log")
 
     with open(main_log_path, 'w', encoding='utf-8') as device_log_file:
@@ -224,52 +197,54 @@ def inspection(login_info, cmds_dict):
         device_log_file.write('=' * 10 + ' ' + 'Local Time' + ' ' + '=' * 10 + '\n\n')
         device_log_file.write(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n\n')
 
-        for cmd in cmds_dict[login_info['device_type']]:
-            if type(cmd) is str:
- + cmd + ' ' + '=' * 10 + '\n\n')
-                尝试:
-                    显示 = ssh.send_command(命令, 读取超时=120)
-                except 异常.ReadTimeout:
+        # 执行常规巡检命令
+        for cmd in cmds_dict.get(login_info['device_type'], []):
+            if isinstance(cmd, str):
+                device_log_file.write('=' * 10 + ' ' + cmd + ' ' + '=' * 10 + '\n\n')
+                try:
+                    show = ssh.send_command(cmd, read_timeout=120)
+                except exceptions.ReadTimeout:
                     print(f'设备 {login_info["host"]} 命令 {cmd} 执行超时！')
                     show = f'命令 {cmd} 执行超时！'
                 finally:
                     device_log_file.write(show + '\n\n')
 
-        # 额外命令单独保存（非必要）
-        额外命令 = {
-            "显示日志告警": f"{登录信息['主机']}_显示日志告警.log",
-            "显示日志缓冲区": f"{登录信息['主机']}_显示日志缓冲区.log"
+        # 额外命令单独保存
+        extra_commands = {
+            "show logging alarm": f"{login_info['host']}_show_logging_alarm.log",
+            "display logbuffer": f"{login_info['host']}_display_logbuffer.log"
         }
-        对于 cmd, filename 在 extra_commands.items():
+        for cmd, filename in extra_commands.items():
             try:
-                output = ssh.send_command(cmd, 读取超时时间=60)
+                output = ssh.send_command(cmd, read_timeout=60)
                 extra_log_path = os.path.join(host_subdir, filename)
-                使用 open(extra_log_path, 'w', 编码='utf-8') 作为 extra_f:
+                with open(extra_log_path, 'w', encoding='utf-8') as extra_f:
                     extra_f.write(output)
             except Exception:
-                pass  # 静默失败
+                pass  # 命令不支持则跳过
 
     t12 = time.time()
-    使用 LOCK：
+    with LOCK:
         print(f'设备 {login_info["host"]} 巡检完成，用时 {round(t12 - t11, 1)} 秒。')
 
-    ssh.断开连接()
-    POOL.释放()
+    ssh.disconnect()
+    POOL.release()
 
 
 if __name__ == '__main__':
-    t1 = time.时间()
+    t1 = time.time()
     threading_list = []
     devices_info, cmds_info = read_info()
 
     print(f'\n巡检开始...')
     print(f'\n' + '>' * 40 + '\n')
 
-    如果 os.path.exists(LOCAL_TIME):
+    # 清空并重建当天目录
+    if os.path.exists(LOCAL_TIME):
         shutil.rmtree(LOCAL_TIME)
     os.makedirs(LOCAL_TIME)
 
-    对于 device_info 在 devices_info 中：
+    for device_info in devices_info:
         updated_device_info = device_info.copy()
         updated_device_info["conn_timeout"] = 40
         pre_device = threading.Thread(target=inspection, args=(updated_device_info, cmds_info), name=device_info['host'] + '_Thread')
@@ -281,12 +256,12 @@ if __name__ == '__main__':
         _.join()
 
     try:
-(操作系统。getcwd(), 本地时间， '01log.log'), 'r', 编码='utf-8')作为日志文件：
-len(日志文件.readlines())
+        with open(os.path.join(os.getcwd(), LOCAL_TIME, '01log.log'), 'r', encoding='utf-8') as log_file:
+            file_lines = len(log_file.readlines())
     except FileNotFoundError:
         file_lines = 0
 
     t2 = time.time()
-    打印(f'\n' + '<' * 40 + '\n')
+    print(f'\n' + '<' * 40 + '\n')
     print(f'巡检完成，共巡检 {len(threading_list)} 台设备，{file_lines} 台异常，共用时 {round(t2 - t1, 1)} 秒。\n')
-    输入('输入Enter退出！')
+    input('输入Enter退出！')
