@@ -1,0 +1,43 @@
+name: Build Executable
+on: [push, workflow_dispatch] # 触发条件：代码推送或手动触发
+
+jobs:
+ 构建:
+    名称: 基于 ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    策略:
+      矩阵:
+        包含:
+          - os: windows-latest    # 目标1: Windows .exe
+            目标: windows
+          - os: ubuntu-latest     # 目标2: Linux 二进制文件
+            目标: linux
+          - os: macos-latest      # 目标3: macOS 二进制文件
+            目标: macos
+
+    步骤:
+      - name: Checkout code
+        使用: actions/checkout@v4
+
+      - 名称: 设置 Python
+        使用: actions/setup-python@v5
+        使用:
+          python版本: '3.x'   # 替换为你的Python版本
+
+      - 名称: 安装依赖项
+        运行: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller     # 安装 PyInstaller
+          pip install -r requirements.txt   # 如果项目有 requirements.txt
+
+      # 根据目标平台调整 PyInstaller 命令
+      - name: 使用 PyInstaller 构建
+        运行: |
+          python -m PyInstaller --onefile --name "myapp-${{ matrix.target }}" devices_inspection.py
+        # 将 your_script.py 替换为你的主程序入口文件名
+
+      - 名称: 上传构建产物
+        用途: actions/upload-artifact@v4
+        使用:
+          名称: myapp-${{ matrix.target }}
+          路径: dist/myapp-${{ matrix.target }}*
