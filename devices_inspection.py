@@ -251,7 +251,7 @@ def connect_with_retry(login_info, max_retries=3, retry_delay=5):
                 finally:
                     device_log_file.write(show + '\n\n')
 
-    # === 功能2：根据设备类型执行额外命令，输出 {host}.log.log ===
+    # === 功能2：根据设备类型执行额外命令，输出 {host}-log.log ===
     device_type = login_info['device_type']
     extra_cmd = None
     if device_type in ['cisco_ios', 'cisco_ios_telnet']:
