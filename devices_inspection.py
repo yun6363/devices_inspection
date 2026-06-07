@@ -13,7 +13,7 @@ devices_inspection.py —— 网络设备自动化巡检脚本
     - 通过 Netmiko 库以 SSH/Telnet 方式登录设备，支持多种设备类型；
     - 采用多线程并发巡检，最大并发线程数为 200（可配置），显著提升巡检效率；
     - 自动按当天日期创建结果目录，每台设备生成独立的子目录，其中：
-        * {host}.log          : 常规巡检命令输出
+        * {host}.log          : 常规巡检命令输出（自动过滤掉 show logging alarm / display logbuffer）
         * {host}.log.log      : 设备类型对应的额外命令输出（Cisco: show logging alarm, Huawei: display logbuffer）
     - 对登录失败（超时、认证失败、协议错误等）的设备统一记录至 01log.log 文件；
     - 认证失败自动重试3次，提高巡检容错性；
@@ -208,23 +208,7 @@ def inspection(login_info, cmds_dict):
     os.makedirs(host_subdir, exist_ok=True)
     main_log = os.path.join(host_subdir, f"{login_info['host']}.log")
 
-    with open(main_log, 'w', encoding='utf-8') as f:
-        with LOCK:
-            print(f'设备 {login_info["host"]} 正在巡检...')
-        f.write('=' * 10 + ' Local Time ' + '=' * 10 + '\n\n')
-        f.write(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n\n')
-
-        for cmd in cmds_dict[login_info['device_type']]:
-            if isinstance(cmd, str):
-                f.write('=' * 10 + ' ' + cmd + ' ' + '=' * 10 + '\n\n')
-                try:
-                    out = ssh.send_command(cmd, read_timeout=120)
-                except exceptions.ReadTimeout:
-                    print(f'设备 {login_info["host"]} 命令 {cmd} 执行超时！')
-                    out = f'命令 {cmd} 执行超时！'
-                f.write(out + '\n\n')
-
-    # 功能2：根据设备类型执行额外命令，输出 {host}-log.log
+    # 确定额外命令（功能2）
     device_type = login_info['device_type']
     extra_cmd = None
     if device_type in ['cisco_ios', 'cisco_ios_telnet']:
@@ -232,10 +216,32 @@ def inspection(login_info, cmds_dict):
     elif device_type == 'huawei':
         extra_cmd = 'display logbuffer'
 
+    with open(main_log, 'w', encoding='utf-8') as f:
+        with LOCK:
+            print(f'设备 {login_info["host"]} 正在巡检...')
+        f.write('=' * 10 + ' Local Time ' + '=' * 10 + '\n\n')
+        f.write(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n\n')
+
+        # 常规命令列表：过滤掉与额外命令相同的命令（避免重复）
+        for cmd in cmds_dict[login_info['device_type']]:
+            if not isinstance(cmd, str):
+                continue
+            # 如果当前命令就是额外命令，则跳过（不写入主日志）
+            if extra_cmd and cmd.strip() == extra_cmd.strip():
+                continue
+            f.write('=' * 10 + ' ' + cmd + ' ' + '=' * 10 + '\n\n')
+            try:
+                out = ssh.send_command(cmd, read_timeout=120)
+            except exceptions.ReadTimeout:
+                print(f'设备 {login_info["host"]} 命令 {cmd} 执行超时！')
+                out = f'命令 {cmd} 执行超时！'
+            f.write(out + '\n\n')
+
+    # 功能2：执行额外命令并单独输出到 {host}.log.log
     if extra_cmd:
         try:
             out = ssh.send_command(extra_cmd, read_timeout=60)
-            extra_log = os.path.join(host_subdir, f"{login_info['host']}-log.log")
+            extra_log = os.path.join(host_subdir, f"{login_info['host']}.log.log")
             with open(extra_log, 'w', encoding='utf-8') as ef:
                 ef.write(out)
         except Exception:
